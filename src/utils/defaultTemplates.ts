@@ -9,6 +9,7 @@ export const predefinedDocuments: PdfDocumentOption[] = [
     brand: 'adal',
     language: 'en',
     templateFile: 'adal_en.json',
+    pdfFileName: '2026_Adal_Targi_MAPIC_GuestBook_Adal_Formularz_ENG.pdf',
   },
   {
     id: 'adal_pl',
@@ -18,6 +19,7 @@ export const predefinedDocuments: PdfDocumentOption[] = [
     brand: 'adal',
     language: 'pl',
     templateFile: 'adal_pl.json',
+    pdfFileName: '2026_Adal_Targi_MAPIC_GuestBook_Formularz_PL.pdf',
   },
   {
     id: 'perfect_light_pl',
@@ -27,6 +29,7 @@ export const predefinedDocuments: PdfDocumentOption[] = [
     brand: 'perfect_light',
     language: 'pl',
     templateFile: 'perfect_light_pl.json',
+    pdfFileName: '2026_Perfect_Targi_MAPIC_GuestBook_01_Formularz_PL.pdf',
   },
 ];
 

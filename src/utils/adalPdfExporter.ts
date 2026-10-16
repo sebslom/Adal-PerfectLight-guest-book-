@@ -6,114 +6,56 @@ export async function generateAndDownloadPdf(
   fields: FormField[],
   docOption: PdfDocumentOption
 ): Promise<void> {
-  const pdfDoc = await PDFDocument.create();
-  const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  let pdfDoc: PDFDocument;
+  let useExistingTemplate = false;
 
-  const isEn = docOption.language === 'en';
-  const isPerfectLight = docOption.brand === 'perfect_light';
+  // Try loading real original PDF template from local / public or raw GitHub
+  if (docOption.pdfFileName) {
+    const candidates = [
+      `./${docOption.pdfFileName}`,
+      `/${docOption.pdfFileName}`,
+      `https://raw.githubusercontent.com/sebslom/Adal-PerfectLight-guest-book-/main/${docOption.pdfFileName}`
+    ];
 
-  // Standard A4 dimensions in points: 595.28 x 841.89
+    for (const url of candidates) {
+      try {
+        const res = await fetch(url);
+        if (res.ok) {
+          const buffer = await res.arrayBuffer();
+          pdfDoc = await PDFDocument.load(buffer);
+          useExistingTemplate = true;
+          break;
+        }
+      } catch {
+        // try next candidate
+      }
+    }
+  }
+
+  // Fallback: create fresh PDF document if template not loaded
+  if (!useExistingTemplate) {
+    pdfDoc = await PDFDocument.create();
+  }
+
+  const fontRegular = await pdfDoc!.embedFont(StandardFonts.Helvetica);
+  const fontBold = await pdfDoc!.embedFont(StandardFonts.HelveticaBold);
+
   const PAGE_WIDTH = 595.28;
   const PAGE_HEIGHT = 841.89;
 
-  // Render a specific page
-  const renderPage = async (pageNum: 1 | 2) => {
-    const page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+  // Ensure 2 pages exist
+  if (!useExistingTemplate) {
+    pdfDoc!.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+    pdfDoc!.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+  }
+
+  const pages = pdfDoc!.getPages();
+
+  // Draw fields on Page 1 and Page 2
+  for (let pageNum = 1; pageNum <= Math.min(2, pages.length); pageNum++) {
+    const page = pages[pageNum - 1];
     const { width, height } = page.getSize();
 
-    // Background
-    page.drawRectangle({
-      x: 0,
-      y: 0,
-      width,
-      height,
-      color: rgb(1, 1, 1),
-    });
-
-    // Brand color
-    const brandGold = isPerfectLight ? rgb(0.95, 0.60, 0.05) : rgb(0.72, 0.62, 0.42);
-    const textDark = rgb(0.15, 0.18, 0.22);
-    const lineGray = rgb(0.80, 0.82, 0.86);
-
-    // Header on Page 1 or Page 2
-    if (pageNum === 1) {
-      if (isPerfectLight) {
-        page.drawText('perfect light.', {
-          x: 40,
-          y: height - 60,
-          size: 24,
-          font: fontBold,
-          color: textDark,
-        });
-      } else {
-        page.drawText('Adal', {
-          x: 40,
-          y: height - 55,
-          size: 32,
-          font: fontBold,
-          color: brandGold,
-        });
-        page.drawText('DECORATIONS', {
-          x: 42,
-          y: height - 68,
-          size: 7.5,
-          font: fontRegular,
-          color: brandGold,
-        });
-      }
-
-      page.drawText('GUEST BOOK 2026', {
-        x: 40,
-        y: height - 100,
-        size: 16,
-        font: fontBold,
-        color: isPerfectLight ? rgb(0.9, 0.5, 0.1) : brandGold,
-      });
-      page.drawText('MAPIC 3 - 4.11.2026', {
-        x: 40,
-        y: height - 114,
-        size: 8.5,
-        font: fontRegular,
-        color: rgb(0.4, 0.45, 0.5),
-      });
-    } else {
-      // Header Page 2
-      page.drawText('GUEST BOOK 2026', {
-        x: 40,
-        y: height - 48,
-        size: 16,
-        font: fontBold,
-        color: isPerfectLight ? rgb(0.9, 0.5, 0.1) : brandGold,
-      });
-      page.drawText('MAPIC 3 - 4.11.2026', {
-        x: 40,
-        y: height - 62,
-        size: 8.5,
-        font: fontRegular,
-        color: rgb(0.4, 0.45, 0.5),
-      });
-
-      if (isPerfectLight) {
-        page.drawText('perfect light.', {
-          x: width - 150,
-          y: height - 52,
-          size: 18,
-          font: fontBold,
-          color: textDark,
-        });
-      } else {
-        page.drawText('Adal', {
-          x: width - 120,
-          y: height - 52,
-          size: 24,
-          font: fontBold,
-          color: brandGold,
-        });
-      }
-    }
-
-    // Filter fields for this page
     const pageFields = fields.filter((f) => f.page === pageNum);
 
     for (const field of pageFields) {
@@ -126,46 +68,26 @@ export async function generateAndDownloadPdf(
 
       if (field.type === 'checkbox') {
         const isChecked = value === true || value === 'true';
-        page.drawRectangle({
-          x: fieldX,
-          y: fieldY + (fieldH / 2) - 5,
-          width: 10,
-          height: 10,
-          borderColor: rgb(0.3, 0.35, 0.4),
-          borderWidth: 1,
-          color: isChecked ? rgb(0.15, 0.45, 0.85) : rgb(1, 1, 1),
-        });
-
         if (isChecked) {
           page.drawText('X', {
-            x: fieldX + 2,
+            x: fieldX + 1.5,
             y: fieldY + (fieldH / 2) - 3,
-            size: 7.5,
+            size: 9,
             font: fontBold,
-            color: rgb(1, 1, 1),
+            color: rgb(0.1, 0.4, 0.85),
           });
         }
       } else if (field.type === 'signature') {
-        page.drawRectangle({
-          x: fieldX,
-          y: fieldY,
-          width: fieldW,
-          height: fieldH,
-          borderColor: lineGray,
-          borderWidth: 1,
-          color: rgb(0.99, 0.99, 1),
-        });
-
         if (entry.signatureDataUrl && entry.signatureDataUrl.startsWith('data:image/png')) {
           try {
             const base64Data = entry.signatureDataUrl.split(',')[1];
             const signatureBytes = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
-            const embeddedImage = await pdfDoc.embedPng(signatureBytes);
+            const embeddedImage = await pdfDoc!.embedPng(signatureBytes);
 
-            const scale = Math.min((fieldW - 8) / embeddedImage.width, (fieldH - 8) / embeddedImage.height, 1);
+            const scale = Math.min((fieldW - 6) / embeddedImage.width, (fieldH - 6) / embeddedImage.height, 1);
             page.drawImage(embeddedImage, {
-              x: fieldX + 4,
-              y: fieldY + 4,
+              x: fieldX + 3,
+              y: fieldY + 3,
               width: embeddedImage.width * scale,
               height: embeddedImage.height * scale,
             });
@@ -174,10 +96,8 @@ export async function generateAndDownloadPdf(
           }
         }
       } else {
-        // Text / Textarea / Date / Email
         const textVal = value !== undefined && value !== null ? String(value) : '';
         if (textVal) {
-          // Clean accented chars for Standard Helvetica font
           const cleanText = textVal
             .replace(/ą/g, 'a').replace(/Ą/g, 'A')
             .replace(/ć/g, 'c').replace(/Ć/g, 'C')
@@ -195,46 +115,29 @@ export async function generateAndDownloadPdf(
             for (const line of lines) {
               if (curY < fieldY + 2) break;
               page.drawText(line.substring(0, 85), {
-                x: fieldX + 3,
+                x: fieldX + 2,
                 y: curY,
                 size: 8.5,
                 font: fontRegular,
-                color: textDark,
+                color: rgb(0.1, 0.15, 0.2),
               });
               curY -= 11;
             }
           } else {
             page.drawText(cleanText.substring(0, 60), {
-              x: fieldX + 3,
-              y: fieldY + 4,
+              x: fieldX + 2,
+              y: fieldY + 3,
               size: 8.5,
               font: fontRegular,
-              color: textDark,
+              color: rgb(0.1, 0.15, 0.2),
             });
           }
         }
       }
     }
+  }
 
-    // Bottom footer text
-    const footerText = isPerfectLight
-      ? 'Perfect Light Sp. z o.o. • Krakow, ul. Poznanska 10/130 • 30-012 Krakow • POLAND • perfect-light.pl'
-      : 'ADAL Sp. z o.o. • Kozieglowki, ul. Lipowa 72 • 42-350 Kozieglowy • POLAND • adal-decorations.pl';
-
-    page.drawText(footerText, {
-      x: 35,
-      y: 22,
-      size: 7,
-      font: fontRegular,
-      color: rgb(0.5, 0.55, 0.6),
-    });
-  };
-
-  // Render Page 1 and Page 2
-  await renderPage(1);
-  await renderPage(2);
-
-  const pdfBytes = await pdfDoc.save();
+  const pdfBytes = await pdfDoc!.save();
   const blob = new Blob([pdfBytes as any], { type: 'application/pdf' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

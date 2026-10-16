@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { PdfDocumentOption } from '../types';
+import { renderPdfToImageUrls } from '../utils/pdfRenderer';
 
 interface AdalFormBackgroundProps {
   docOption: PdfDocumentOption;
@@ -7,40 +8,92 @@ interface AdalFormBackgroundProps {
   customBackgroundUrl?: string | null;
 }
 
+// Global cache for rendered PDF page images so we only render each PDF once
+const renderedPdfCache: Record<string, { page1: string; page2?: string }> = {};
+
 export const AdalFormBackground: React.FC<AdalFormBackgroundProps> = ({
   docOption,
   page,
   customBackgroundUrl,
 }) => {
-  // If a rendered image of a custom PDF or sketch exists, display it directly
-  if (customBackgroundUrl) {
+  const [renderedImage, setRenderedImage] = useState<string | null>(null);
+
+  useEffect(() => {
+    // If a custom background image is explicitly provided, use that
+    if (customBackgroundUrl) {
+      setRenderedImage(customBackgroundUrl);
+      return;
+    }
+
+    // If docOption has a pdfFileName, try rendering the actual PDF
+    if (docOption.pdfFileName) {
+      const cacheKey = docOption.pdfFileName;
+      if (renderedPdfCache[cacheKey]) {
+        const cached = renderedPdfCache[cacheKey];
+        setRenderedImage(page === 1 ? cached.page1 : (cached.page2 || cached.page1));
+        return;
+      }
+
+      // Try fetching the local file or raw GitHub file
+      const fetchAndRender = async () => {
+        try {
+          const candidates = [
+            `./${docOption.pdfFileName}`,
+            `/${docOption.pdfFileName}`,
+            `https://raw.githubusercontent.com/sebslom/Adal-PerfectLight-guest-book-/main/${docOption.pdfFileName}`
+          ];
+
+          let buffer: ArrayBuffer | null = null;
+          for (const url of candidates) {
+            try {
+              const res = await fetch(url);
+              if (res.ok) {
+                buffer = await res.arrayBuffer();
+                break;
+              }
+            } catch {
+              // try next
+            }
+          }
+
+          if (buffer) {
+            const { page1, page2 } = await renderPdfToImageUrls(buffer);
+            renderedPdfCache[cacheKey] = { page1, page2 };
+            setRenderedImage(page === 1 ? page1 : (page2 || page1));
+          }
+        } catch (err) {
+          console.warn('Could not render PDF via PDF.js, using SVG template fallback:', err);
+        }
+      };
+
+      fetchAndRender();
+    }
+  }, [docOption.pdfFileName, customBackgroundUrl, page]);
+
+  // If a rendered real PDF page image is available, render it with 100% fidelity
+  if (renderedImage) {
     return (
       <div className="w-full h-full relative select-none pointer-events-none bg-white overflow-hidden flex items-center justify-center">
         <img
-          src={customBackgroundUrl}
-          alt={`PDF Page ${page}`}
+          src={renderedImage}
+          alt={`PDF Sheet Page ${page}`}
           className="w-full h-full object-contain pointer-events-none"
         />
       </div>
     );
   }
 
+  // Fallback: high-contrast SVG template
   const isEn = docOption.language === 'en';
   const isPerfectLight = docOption.brand === 'perfect_light';
-
-  // Distinctive Brand Colors:
-  // Adal: elegant olive-gold #b49c68
-  // Perfect Light: vibrant amber/orange #f59e0b / #d97706
   const brandGold = isPerfectLight ? '#d97706' : '#b49c68';
   const brandGoldDark = isPerfectLight ? '#b45309' : '#9b8450';
 
   return (
     <div className="w-full h-full relative select-none pointer-events-none bg-white text-slate-800 font-sans p-8 flex flex-col justify-between overflow-hidden shadow-inner">
-      {/* --- PAGE 1 --- */}
       {page === 1 ? (
         <div className="relative z-10 flex-1 flex flex-col justify-between">
           <div>
-            {/* Header: Logo */}
             <div className="pt-2">
               {isPerfectLight ? (
                 <div className="flex items-center gap-3">
@@ -85,7 +138,6 @@ export const AdalFormBackground: React.FC<AdalFormBackgroundProps> = ({
               )}
             </div>
 
-            {/* Document Title Header */}
             <div className="mt-4">
               <h1 
                 className="text-2xl font-normal tracking-wide"
@@ -99,9 +151,7 @@ export const AdalFormBackground: React.FC<AdalFormBackgroundProps> = ({
             </div>
           </div>
 
-          {/* Form Content Lines */}
           <div className="relative flex-1 mt-6 text-[13px] text-slate-800 space-y-4">
-            {/* Row 1: Date & Contact Person */}
             <div className="flex items-end justify-between">
               <div className="flex items-end gap-2 w-[45%]">
                 <span className="font-semibold text-slate-900">{isEn ? 'Date:' : 'Data:'}</span>
@@ -113,7 +163,6 @@ export const AdalFormBackground: React.FC<AdalFormBackgroundProps> = ({
               </div>
             </div>
 
-            {/* Row 2: Country & Company Name */}
             <div className="flex items-end justify-between">
               <div className="flex items-end gap-2 w-[45%]">
                 <span className="font-semibold text-slate-900">{isEn ? 'Country:' : 'Kraj:'}</span>
@@ -125,7 +174,6 @@ export const AdalFormBackground: React.FC<AdalFormBackgroundProps> = ({
               </div>
             </div>
 
-            {/* Row 3: Email & Phone */}
             <div className="flex items-end justify-between">
               <div className="flex items-end gap-2 w-[45%]">
                 <span className="font-semibold text-slate-900">{isEn ? 'Email:' : 'Email:'}</span>
@@ -137,7 +185,6 @@ export const AdalFormBackground: React.FC<AdalFormBackgroundProps> = ({
               </div>
             </div>
 
-            {/* Row 4: Catalogue Checkboxes */}
             <div className="pt-2 flex items-center text-xs gap-4 text-slate-700">
               <span className="font-semibold text-slate-900">
                 {isEn ? 'Catalogue to send:' : 'Katalog do wysłania:'}
@@ -161,7 +208,6 @@ export const AdalFormBackground: React.FC<AdalFormBackgroundProps> = ({
               </div>
             </div>
 
-            {/* Row 5 & 6: Address Lines */}
             <div className="flex items-end gap-2">
               <span className="font-semibold text-slate-900">{isEn ? 'Adress line 1:' : 'Adres 1:'}</span>
               <div className="flex-1 border-b border-slate-300 pb-0.5" />
@@ -171,7 +217,6 @@ export const AdalFormBackground: React.FC<AdalFormBackgroundProps> = ({
               <div className="flex-1 border-b border-slate-300 pb-0.5" />
             </div>
 
-            {/* Row 7: Seasonal decorations */}
             <div className="pt-1">
               <div className="flex items-center justify-between text-xs text-slate-800">
                 <span>{isEn ? 'Are you insterested in seasonal decorations?' : 'Czy interesują Cię dekoracje sezonowe?'}</span>
@@ -190,7 +235,6 @@ export const AdalFormBackground: React.FC<AdalFormBackgroundProps> = ({
                 </span>
               </div>
 
-              {/* Seasons list */}
               <div className="flex items-center justify-between mt-2 text-[11px] text-slate-600 px-4">
                 <div className="flex items-center gap-1">
                   <span className="w-3.5 h-3.5 border border-slate-400 rounded-2xs inline-block bg-white" />
@@ -219,7 +263,6 @@ export const AdalFormBackground: React.FC<AdalFormBackgroundProps> = ({
               </div>
             </div>
 
-            {/* Row 8: Showroom visit */}
             <div className="pt-1">
               <div className="flex items-center justify-between text-xs text-slate-800">
                 <span>{isEn ? 'Would you like to visit our ofice and showroom?' : 'Czy chcieliby Państwo odwiedzić nasze biuro i salon wystawowy?'}</span>
@@ -242,7 +285,6 @@ export const AdalFormBackground: React.FC<AdalFormBackgroundProps> = ({
               </div>
             </div>
 
-            {/* Notes Section Header */}
             <div className="pt-4 text-center">
               <h3 
                 className="text-lg font-normal tracking-wide"
@@ -254,10 +296,8 @@ export const AdalFormBackground: React.FC<AdalFormBackgroundProps> = ({
           </div>
         </div>
       ) : (
-        /* --- PAGE 2 --- */
         <div className="relative z-10 flex-1 flex flex-col justify-between">
           <div>
-            {/* Header Page 2 */}
             <div className="flex items-start justify-between">
               <div>
                 <h1 
@@ -271,7 +311,6 @@ export const AdalFormBackground: React.FC<AdalFormBackgroundProps> = ({
                 </p>
               </div>
 
-              {/* Logo Page 2 */}
               <div>
                 {isPerfectLight ? (
                   <div className="flex items-center gap-2">
@@ -309,7 +348,6 @@ export const AdalFormBackground: React.FC<AdalFormBackgroundProps> = ({
               </div>
             </div>
 
-            {/* Notes Continued title */}
             <div className="mt-4 text-center">
               <h3 
                 className="text-lg font-normal tracking-wide"
@@ -320,9 +358,7 @@ export const AdalFormBackground: React.FC<AdalFormBackgroundProps> = ({
             </div>
           </div>
 
-          {/* Lower Sections on Page 2: Summary & Survey */}
           <div className="space-y-4 text-xs">
-            {/* Section: Summary */}
             <div>
               <h4 
                 className="text-base font-normal mb-2"
@@ -341,7 +377,6 @@ export const AdalFormBackground: React.FC<AdalFormBackgroundProps> = ({
                   <div className="flex-1 border-b border-slate-300 pb-0.5" />
                 </div>
 
-                {/* Sales Season */}
                 <div className="flex items-center gap-4 pt-1">
                   <span className="font-semibold text-slate-900">{isEn ? 'Sales Season:' : 'Sezon wyprzedaży:'}</span>
                   <div className="flex items-center gap-3">
@@ -364,7 +399,6 @@ export const AdalFormBackground: React.FC<AdalFormBackgroundProps> = ({
                   </div>
                 </div>
 
-                {/* Project Type */}
                 <div className="pt-1">
                   <div className="flex items-center gap-4">
                     <span className="font-semibold text-slate-900 w-24">{isEn ? 'Project Type:' : 'Rodzaj projektu:'}</span>
@@ -404,7 +438,6 @@ export const AdalFormBackground: React.FC<AdalFormBackgroundProps> = ({
               </div>
             </div>
 
-            {/* Section: Survey */}
             <div className="pt-2">
               <div className="flex items-baseline justify-between mb-2">
                 <h4 
@@ -420,7 +453,6 @@ export const AdalFormBackground: React.FC<AdalFormBackgroundProps> = ({
                 </p>
               </div>
 
-              {/* Question 1 */}
               <div className="space-y-1 mt-2">
                 <p className="text-[11px] text-slate-700 font-medium">
                   {isEn ? 'What is most important to you as our bussines partner?' : 'Co jest dla Ciebie najważniejsze jako naszego partnera biznesowego?'}
@@ -449,7 +481,6 @@ export const AdalFormBackground: React.FC<AdalFormBackgroundProps> = ({
                 </div>
               </div>
 
-              {/* Question 2 */}
               <div className="space-y-1 mt-3">
                 <p className="text-[11px] text-slate-700 font-medium">
                   {isEn ? 'What do you value ADAL for?' : 'Za co cenisz firmę ADAL?'}
@@ -482,7 +513,6 @@ export const AdalFormBackground: React.FC<AdalFormBackgroundProps> = ({
         </div>
       )}
 
-      {/* Footer Line */}
       <div className="relative z-10 pt-4 mt-2 border-t border-slate-200 text-center text-[10px] text-slate-400">
         {isPerfectLight ? (
           <p>

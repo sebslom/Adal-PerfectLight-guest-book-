@@ -54,6 +54,7 @@ export interface PdfDocumentOption {
   brand: 'adal' | 'perfect_light' | 'custom';
   language: Language;
   templateFile: string;
+  pdfFileName?: string;
   customPdfUrl?: string;
 }
 
