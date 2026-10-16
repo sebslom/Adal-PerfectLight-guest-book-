@@ -1,0 +1,6 @@
+{
+  "name": "Adal Guest Book - MAPIC 2026",
+  "description": "Profesjonalna cyfrowa księga gości targowych (Guest Book) z obsługą formularzy PDF, 3 dedykowanymi szablonami, trybem tabletu, podpisem i edytorem szablonów z blokadą kłódką.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
